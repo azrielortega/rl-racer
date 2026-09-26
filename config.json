@@ -1,0 +1,12 @@
+{
+  "DT": 0.016666666666666666,
+  "FRAME_SKIP": 4,
+  "ACCEL": 250,
+  "DRAG": 0.5,
+  "MAX_SPEED": 300,
+  "MAX_REVERSE": 100,
+  "TURN_RATE": 3.0,
+  "CAR_RADIUS": 10,
+  "RAY_MAX": 300,
+  "TRACK": "tracks/monza.json"
+}
