@@ -1,15 +1,11 @@
 import math
 
-import pytest
-
 from sim.config import load_config, load_track
-from sim.geometry import point_segment_distance
 from sim.physics import Car
-from sim.race import Progress, bounce_off_walls, hits_wall, race_step, update_progress
+from sim.race import Progress, is_out_of_bounds, race_step, update_progress
 
 CFG = load_config()
 TRACK = load_track(CFG.track)
-R = CFG.car_radius
 
 # Three checkpoints across a corridor driven toward +x: x = 100, 200, 300 (the last is the finish).
 # Oriented like gen_track's checkpoints (first end at +y for travel toward +x), so +x counts as forward.
@@ -80,47 +76,60 @@ def test_monza_backwards_counts_nothing():
         pos = target
 
 
-def test_start_poses_are_clear_of_walls():
+def test_start_poses_are_in_bounds():
     for pose in TRACK.start_poses:
-        assert not hits_wall(Car.at(pose), TRACK.walls, R)
+        assert not is_out_of_bounds(Car.at(pose), TRACK, CFG)
 
 
-def test_bounce_pushes_car_out_and_reverses_speed():
-    wall = ((0, 0), (100, 0))
-    car = Car(50, 6, -math.pi / 2, speed=200)  # 6 from the wall, radius 10, heading into it
-    assert bounce_off_walls(car, [wall], R)
-    assert point_segment_distance((car.x, car.y), *wall) == pytest.approx(R)
-    assert car.speed == pytest.approx(-60)
+def car_beside_centerline(offset, turn=0.0):
+    """Car next to the middle of the first centerline segment, `offset` to the side, facing along it plus `turn`."""
+    (x1, y1), (x2, y2) = TRACK.centerline[0]
+    length = math.dist((x1, y1), (x2, y2))
+    nx, ny = -(y2 - y1) / length, (x2 - x1) / length
+    heading = math.atan2(y2 - y1, x2 - x1) + turn
+    return Car((x1 + x2) / 2 + nx * offset, (y1 + y2) / 2 + ny * offset, heading)
 
 
-def test_bounce_out_of_corner_touching_two_walls():
-    walls = [((0, 0), (100, 0)), ((0, 0), (0, 100))]
-    car = Car(5, 5, -3 * math.pi / 4, speed=100)
-    assert bounce_off_walls(car, walls, R)
-    for wall in walls:
-        assert point_segment_distance((car.x, car.y), *wall) >= R - 1e-9
-    assert car.speed == pytest.approx(-30)  # bounced once, not once per wall
+def test_any_corner_over_the_edge_is_out_of_bounds():
+    half = TRACK.width / 2
+    side = CFG.car_width / 2  # facing along the road, the corners stick out half the car width sideways
+    for sign in (1, -1):
+        assert not is_out_of_bounds(car_beside_centerline(sign * (half - side - 1)), TRACK, CFG)
+        assert is_out_of_bounds(car_beside_centerline(sign * (half - side + 1)), TRACK, CFG)
 
 
-def test_training_mode_crashes_without_moving_car():
-    wall = ((0, 0), (100, 0))
-    car = Car(50, 5, 0)
-    assert hits_wall(car, [wall], R)
-    assert (car.x, car.y) == (50, 5)
-    assert not hits_wall(Car(50, 11, 0), [wall], R)
+def test_car_across_the_road_uses_its_length():
+    half = TRACK.width / 2
+    reach = CFG.car_length / 2  # turned 90 degrees, the corners stick out half the car length sideways
+    assert not is_out_of_bounds(car_beside_centerline(half - reach - 1, math.pi / 2), TRACK, CFG)
+    assert is_out_of_bounds(car_beside_centerline(half - reach + 1, math.pi / 2), TRACK, CFG)
 
 
-def test_race_step_full_throttle_from_start_crashes_eventually_in_both_modes():
-    # Monza starts on the main straight, so flat out with no steering reaches the first corner's wall.
-    for bounce in (False, True):
-        car, progress = Car.at(TRACK.start_poses[0]), Progress()
-        passed = 0
-        for _ in range(600):
-            result = race_step(car, progress, 1, 0, CFG, TRACK, bounce)
-            passed += result.checkpoints
-            if result.crashed:
-                break
-        assert result.crashed
-        assert passed >= 1
-        if bounce:
-            assert car.speed < 0
+def test_full_throttle_from_start_leaves_track_once_and_keeps_going():
+    # Monza starts on the main straight, so flat out with no steering runs off at the first corner.
+    car, progress = Car.at(TRACK.start_poses[0]), Progress()
+    passed, went_out, first_out = 0, 0, None
+    for n in range(600):
+        result = race_step(car, progress, 1, 0, CFG, TRACK)
+        passed += result.checkpoints
+        went_out += result.went_out
+        if result.out_of_bounds and first_out is None:
+            first_out = n
+    assert first_out is not None
+    assert passed >= 1
+    assert went_out == 1  # counted once when leaving, not on every step spent off the road
+    assert result.out_of_bounds
+    assert car.speed == CFG.max_speed  # the road edge doesn't stop or bounce the car
+
+
+def test_going_out_and_back_in_counts_each_exit():
+    progress = Progress()
+    (x1, y1), (x2, y2) = TRACK.centerline[0]
+    length = math.dist((x1, y1), (x2, y2))
+    nx, ny = -(y2 - y1) / length, (x2 - x1) / length
+    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+    exits = 0  # offsets 0 and 60: fully on the road, and fully off it
+    for offset in (0, 60, 60, 0, 60, 0):  # on, out, still out, back on, out again, back on
+        car = Car(mx + nx * offset, my + ny * offset, 0)
+        exits += race_step(car, progress, 0, 0, CFG, TRACK).went_out
+    assert exits == 2

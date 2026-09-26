@@ -22,7 +22,7 @@ def closest_point(p, a, b):
 
 
 def point_segment_distance(p, a, b):
-    """Shortest distance from p to segment a-b; the car hits a wall when this is below CAR_RADIUS.
+    """Shortest distance from p to segment a-b.
 
     Inputs:  p, a, b ((x, y)) - query point and segment endpoints
 
@@ -51,7 +51,7 @@ def segments_cross(p1, p2, q1, q2):
 
 
 def cast_ray(origin, angle, walls, max_dist):
-    """Distance along a ray to the nearest wall, capped at max_dist (one distance sensor, spec §4).
+    """Distance along a ray to the nearest wall, capped at max_dist (one distance sensor, spec 4).
 
     Inputs:  origin ((x, y)); angle (float) - world-space radians; walls (list[((x, y), (x, y))]); max_dist (float)
 

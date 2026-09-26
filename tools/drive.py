@@ -1,4 +1,4 @@
-"""Drive the car around the configured track with the keyboard (game-mode physics: walls bounce).
+"""Drive the car around the configured track with the keyboard (the road edges don't block; leaving the road is flagged).
 
 Usage (from the repo root): python3 -m tools.drive
 Controls: W/S or Up/Down throttle/brake-reverse, A/D or Left/Right steer, V toggle sensor rays, R restart, Esc quit.
@@ -10,16 +10,17 @@ import pygame
 
 from sim.config import load_config, load_track
 from sim.geometry import cast_ray
-from sim.physics import Car
+from sim.physics import Car, corners
 from sim.race import Progress, race_step
 
 MAX_WINDOW = (1400, 850)
 MARGIN = 20
 HUD_HEIGHT = 30
-RAY_OFFSETS = [math.radians(a) for a in (-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90)]  # spec §4
+RAY_OFFSETS = [math.radians(a) for a in (-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90)]  # spec 4
 
 BG, WALL, CP, CP_NEXT, FINISH = (43, 43, 43), (235, 235, 235), (40, 90, 70), (250, 200, 50), (220, 50, 50)
-CAR, NOSE, RAY, HIT, TEXT = (60, 150, 255), (255, 255, 255), (120, 120, 160), (255, 110, 110), (220, 220, 220)
+CAR, CAR_OUT, NOSE, RAY, HIT = (60, 150, 255), (230, 60, 60), (255, 255, 255), (120, 120, 160), (255, 110, 110)
+TEXT, TEXT_OUT = (220, 220, 220), (255, 90, 90)
 
 
 class View:
@@ -41,7 +42,7 @@ class View:
 
 
 def read_input(keys):
-    """Map held keys to the spec §3 action pair.
+    """Map held keys to the spec 3 action pair.
 
     Inputs:  keys (pygame.key.ScancodeWrapper) - result of pygame.key.get_pressed()
 
@@ -57,11 +58,11 @@ def fmt_time(seconds):
     return "--" if seconds is None else f"{seconds:.2f}s"
 
 
-def draw(screen, font, view, cfg, track, car, progress, laps, show_rays):
+def draw(screen, font, view, cfg, track, car, progress, stats, show_rays):
     """Render the track, car, optional sensor rays and the HUD.
 
     Inputs:  screen (Surface); font (Font); view (View); cfg, track, car, progress - sim state;
-             laps (dict) - current/last/best lap times in seconds; show_rays (bool)
+             stats (dict) - current/last/best lap times in seconds and out-of-bounds count; show_rays (bool)
 
     Outputs: None - draws onto screen
     """
@@ -83,18 +84,19 @@ def draw(screen, font, view, cfg, track, car, progress, laps, show_rays):
             if d < cfg.ray_max:
                 pygame.draw.circle(screen, HIT, view(end), 3)
 
-    radius = max(2, cfg.car_radius * view.scale)
-    nose = (car.x + math.cos(car.heading) * cfg.car_radius, car.y + math.sin(car.heading) * cfg.car_radius)
-    pygame.draw.circle(screen, CAR, view(pos), radius)
-    pygame.draw.line(screen, NOSE, view(pos), view(nose), 2)
+    body = [view(p) for p in corners(car, cfg)]
+    pygame.draw.polygon(screen, CAR_OUT if progress.out_of_bounds else CAR, body)
+    pygame.draw.line(screen, NOSE, body[0], body[1], 3)  # front edge
 
     hud = (
         f"speed {car.speed:6.1f} / {cfg.max_speed}   lap {progress.laps + 1}   "
         f"checkpoint {progress.next_checkpoint}/{len(track.checkpoints)}   "
-        f"time {fmt_time(laps['current'])}   last {fmt_time(laps['last'])}   best {fmt_time(laps['best'])}   "
-        f"[V] rays  [R] restart"
+        f"time {fmt_time(stats['current'])}   last {fmt_time(stats['last'])}   best {fmt_time(stats['best'])}   "
+        f"out of bounds x{stats['outs']}   [V] rays  [R] restart"
     )
     screen.blit(font.render(hud, True, TEXT), (MARGIN, 8))
+    if progress.out_of_bounds:
+        screen.blit(font.render("OUT OF BOUNDS", True, TEXT_OUT), (MARGIN, HUD_HEIGHT + 4))
 
 
 def main():
@@ -109,9 +111,9 @@ def main():
     clock = pygame.time.Clock()
 
     def reset():
-        return Car.at(track.start_poses[0]), Progress(), {"current": 0.0, "last": None, "best": None}
+        return Car.at(track.start_poses[0]), Progress(), {"current": 0.0, "last": None, "best": None, "outs": 0}
 
-    car, progress, laps = reset()
+    car, progress, stats = reset()
     show_rays, accumulator, running = True, 0.0, True
     while running:
         for event in pygame.event.get():
@@ -120,21 +122,22 @@ def main():
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_v:
                 show_rays = not show_rays
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                car, progress, laps = reset()
+                car, progress, stats = reset()
 
-        # Fixed-step accumulator (spec §2): physics always advances in exact cfg.dt steps, whatever the frame rate.
+        # Fixed-step accumulator (spec 2): physics always advances in exact cfg.dt steps, whatever the frame rate.
         accumulator += min(clock.tick(60) / 1000, 0.25)
         while accumulator >= cfg.dt:
             throttle, steer = read_input(pygame.key.get_pressed())
-            result = race_step(car, progress, throttle, steer, cfg, track, bounce=True)
-            laps["current"] += cfg.dt
+            result = race_step(car, progress, throttle, steer, cfg, track)
+            stats["current"] += cfg.dt
+            stats["outs"] += result.went_out
             if result.lap:
-                laps["last"] = laps["current"]
-                laps["best"] = min(laps["best"] or math.inf, laps["current"])
-                laps["current"] = 0.0
+                stats["last"] = stats["current"]
+                stats["best"] = min(stats["best"] or math.inf, stats["current"])
+                stats["current"] = 0.0
             accumulator -= cfg.dt
 
-        draw(screen, font, view, cfg, track, car, progress, laps, show_rays)
+        draw(screen, font, view, cfg, track, car, progress, stats, show_rays)
         pygame.display.flip()
     pygame.quit()
 

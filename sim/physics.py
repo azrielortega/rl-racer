@@ -20,6 +20,23 @@ class Car:
         return cls(pose.x, pose.y, pose.heading)
 
 
+def corners(car, cfg):
+    """The four corners of the car's rectangle (CAR_LENGTH along the heading, CAR_WIDTH across).
+
+    Inputs:  car (Car); cfg (Config)
+
+    Outputs: list[(x, y)] - front-left, front-right, back-right, back-left (in screen terms)
+    """
+    fx, fy = math.cos(car.heading) * cfg.car_length / 2, math.sin(car.heading) * cfg.car_length / 2
+    sx, sy = -math.sin(car.heading) * cfg.car_width / 2, math.cos(car.heading) * cfg.car_width / 2
+    return [
+        (car.x + fx - sx, car.y + fy - sy),
+        (car.x + fx + sx, car.y + fy + sy),
+        (car.x - fx + sx, car.y - fy + sy),
+        (car.x - fx - sx, car.y - fy - sy),
+    ]
+
+
 def step(car, throttle, steer, cfg):
     """Advance the car by one fixed physics step (cfg.dt), in place.
 

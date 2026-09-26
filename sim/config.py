@@ -20,7 +20,8 @@ class Config:
     max_reverse: float
     min_turn_radius: float
     grip: float  # max sideways acceleration; sets the turning radius at speed
-    car_radius: float
+    car_length: float
+    car_width: float
     ray_max: float
     track: str
 
@@ -36,7 +37,8 @@ class Pose:
 class Track:
     width: float
     length: float
-    walls: list[Segment]
+    walls: list[Segment]  # road edges: drawn and used by the sensor rays, they don't block the car
+    centerline: list[Segment]  # closed loop; the car is out of bounds beyond width / 2 from it
     checkpoints: list[Segment]  # in driving order; the last one is the finish line
     start_poses: list[Pose]
 
@@ -58,7 +60,7 @@ def load_track(path):
 
     Inputs:  path (str | Path) - track file; relative paths resolve from the repo root
 
-    Outputs: Track - walls and checkpoints as ((x1, y1), (x2, y2)) tuples, plus start poses
+    Outputs: Track - walls, centerline and checkpoints as ((x1, y1), (x2, y2)) tuples, plus start poses
     """
     with open(ROOT / path) as f:
         raw = json.load(f)
@@ -66,6 +68,7 @@ def load_track(path):
         width=raw["width"],
         length=raw["length"],
         walls=[_segment(s) for s in raw["walls"]],
+        centerline=[_segment(s) for s in zip(raw["centerline"], raw["centerline"][1:] + raw["centerline"][:1])],
         checkpoints=[_segment(s) for s in raw["checkpoints"]],
         start_poses=[Pose(p["x"], p["y"], p["heading"]) for p in raw["start_poses"]],
     )

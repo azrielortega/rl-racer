@@ -1,23 +1,22 @@
-import math
 from dataclasses import dataclass
 
-from sim.geometry import closest_point, segments_cross
-from sim.physics import step
-
-BOUNCE = -0.3  # spec 6: speed multiplier when the car hits a wall in game mode
+from sim.geometry import point_segment_distance, segments_cross
+from sim.physics import corners, step
 
 
 @dataclass
 class Progress:
     next_checkpoint: int = 0
     laps: int = 0
+    out_of_bounds: bool = False  # state after the last step, to detect the moment the car leaves the road
 
 
 @dataclass
 class StepResult:
     checkpoints: int = 0  # checkpoints passed in order this step
     lap: bool = False  # crossed the finish line (last checkpoint) this step
-    crashed: bool = False  # touched a wall this step
+    out_of_bounds: bool = False  # car is off the road after this step
+    went_out: bool = False  # car left the road this step (was on it the step before)
 
 
 def update_progress(progress, before, after, checkpoints):
@@ -48,56 +47,31 @@ def _crosses_forward(before, after, checkpoint):
     return forward and segments_cross(before, after, *checkpoint)
 
 
-def hits_wall(car, walls, radius):
-    """Check whether the car's circle overlaps any wall (training: this ends the episode).
+def is_out_of_bounds(car, track, cfg):
+    """Check whether any corner of the car's rectangle is off the road (farther than width / 2 from the centerline).
 
-    Inputs:  car (Car); walls (list[segment]); radius (float) - CAR_RADIUS
+    Inputs:  car (Car); track (Track); cfg (Config) - car size
 
-    Outputs: bool - True if any wall is closer than radius
+    Outputs: bool - True if out of bounds
     """
-    p = (car.x, car.y)
-    return any(math.dist(p, closest_point(p, a, b)) < radius for a, b in walls)
+    limit = track.width / 2
+    # The road edges are the centerline offset by width / 2, so this matches the drawn edges exactly.
+    return any(
+        not any(point_segment_distance(p, a, b) <= limit for a, b in track.centerline) for p in corners(car, cfg)
+    )
 
 
-def bounce_off_walls(car, walls, radius):
-    """Push the car out of any walls it overlaps and bounce its speed (game mode, spec 6).
+def race_step(car, progress, throttle, steer, cfg, track):
+    """One physics step, then the bounds and checkpoint checks, in the same order for training and the game.
 
-    Inputs:  car (Car); walls (list[segment]); radius (float) - CAR_RADIUS
+    Inputs:  car (Car); progress (Progress); throttle, steer (int) - -1/0/+1; cfg (Config); track (Track)
 
-    Outputs: bool - True if the car touched a wall (car.x, car.y, car.speed are updated in place)
-    """
-    hit = False
-    for a, b in walls:
-        c = closest_point((car.x, car.y), a, b)
-        d = math.dist((car.x, car.y), c)
-        if d >= radius:
-            continue
-        hit = True
-        if d == 0:
-            # Centre exactly on the wall: no normal to push along, so back out the way the car came.
-            nx, ny, d = -math.cos(car.heading), -math.sin(car.heading), 0.0
-        else:
-            nx, ny = (car.x - c[0]) / d, (car.y - c[1]) / d
-        car.x += nx * (radius - d)
-        car.y += ny * (radius - d)
-    if hit:
-        car.speed *= BOUNCE  # once per step, even when touching two walls in a corner
-    return hit
-
-
-def race_step(car, progress, throttle, steer, cfg, track, bounce):
-    """One physics step with collisions and checkpoints, in the same order for training and the game.
-
-    Inputs:  car (Car); progress (Progress); throttle, steer (int) - -1/0/+1; cfg (Config); track (Track);
-             bounce (bool) - True for game mode (push out + bounce), False for training (crash only)
-
-    Outputs: StepResult - checkpoints passed, lap completed, wall touched
+    Outputs: StepResult - checkpoints passed, lap completed, out-of-bounds state and whether it just went out
     """
     before = (car.x, car.y)
     step(car, throttle, steer, cfg)
-    if bounce:
-        crashed = bounce_off_walls(car, track.walls, cfg.car_radius)
-    else:
-        crashed = hits_wall(car, track.walls, cfg.car_radius)
+    out = is_out_of_bounds(car, track, cfg)
+    went_out = out and not progress.out_of_bounds
+    progress.out_of_bounds = out
     passed, lap = update_progress(progress, before, (car.x, car.y), track.checkpoints)
-    return StepResult(passed, lap, crashed)
+    return StepResult(passed, lap, out, went_out)

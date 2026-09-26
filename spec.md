@@ -19,7 +19,7 @@ y       += sin(heading) * speed * dt
 - The turning circle is tight when slow (`MIN_TURN_RADIUS`, the steering lock) and grows with speed² when fast (`GRIP` is the maximum sideways acceleration), so tight corners need braking. With 40 / 450 the radius is 40 up to speed 134 and 200 at top speed 300.
 - The turn rate is `speed / radius`, so a stopped car can't spin in place (the agent tends to find spinning as an exploit), and reversing steers the other way.
 - Constants (`ACCEL`, `DRAG`, `MIN_TURN_RADIUS`, `GRIP`, `MAX_SPEED`, `MAX_REVERSE`) go in one shared `config.json` that both Python and TS load, so they can't drift apart.
-- The car is a circle for collisions (radius `CAR_RADIUS`), which makes wall checks a simple distance-to-segment test.
+- The car is a rectangle, `CAR_LENGTH` along its heading by `CAR_WIDTH` across, centred on `x, y`.
 
 ## 2. Timestep: 60 Hz physics, agent acts every 4 steps
 
@@ -58,21 +58,23 @@ y       += sin(heading) * speed * dt
 | Pass the next checkpoint (in order) | **+1** |
 | Complete a lap | **+10** |
 | Each agent step | **-0.01** |
-| Crash (training only) | **-5**, episode ends |
+| Go out of bounds (each time the car leaves the road) | penalty, value TBD |
 
 - A checkpoint only counts if it's the *next* one in order, so reversing and re-crossing earns nothing.
 
-## 6. Collision
+## 6. Out of bounds (no walls)
 
-- **Training:** touching a wall gives -5 and ends the episode.
-- **Game:** the car is pushed out of the wall and bounces back, with `speed *= -0.3`, and the race continues. The agent never trained on a bounce, so it will just recover and drive on.
+- The road edges don't block the car. The car is **out of bounds** as soon as any corner of its rectangle is farther than `width / 2` from the centerline, i.e. over a drawn edge.
+- Each step reports `out_of_bounds` (off the road now) and `went_out` (left the road this step). The penalty is applied each time the car goes out (`went_out`).
+- Checkpoints only span the road, so a car that cuts across off the road misses them and has to come back to earn progress.
+- Same rules in training and in the game.
 
 ## 7. Episode termination (training)
 
 - **Success:** 2 laps completed.
-- **Crash:** hit a wall.
+- **Out of bounds:** TBD (penalty only, or also end the episode).
 - **Stall:** no new checkpoint reached within about 5 seconds (75 agent steps).
-- Use `terminated` for a crash or finishing, and `truncated` for a stall. SB3 treats them differently when bootstrapping value estimates.
+- Use `terminated` for finishing (or out of bounds, if it ends the episode), and `truncated` for a stall. SB3 treats them differently when bootstrapping value estimates.
 
 ## 8. Track format: centerline + width, generated
 
@@ -95,4 +97,4 @@ python3 tools/gen_track.py tracks/<name>.centerline.json -o tracks/<name>.json -
 
 The generated `tracks/<name>.json` holds `walls`, `checkpoints`, `start_poses`, `centerline`, `width`, `length`, and `min_corner_radius`. Python and TS both load this file, and only Python generates it. The script exits non-zero and warns if a corner is tighter than `width/2` or a wall folds back or crosses another wall.
 
-Design tips: keep `width` above about 6× `CAR_RADIUS` and the tightest corner radius above the car's turning radius at speed. The track in use is `tracks/monza.json` (a simplified Monza: chicanes removed, tightest corner radius 48), set by `TRACK` in `config.json`.
+Design tips: keep `width` above about 3× `CAR_LENGTH` and the tightest corner radius above the car's turning radius at speed. The track in use is `tracks/monza.json` (a simplified Monza: chicanes removed, tightest corner radius 48), set by `TRACK` in `config.json`.
