@@ -1,5 +1,3 @@
-"""Kinematic car model (spec §1). Must stay identical to the TypeScript port."""
-
 import math
 from dataclasses import dataclass
 
