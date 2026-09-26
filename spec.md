@@ -10,13 +10,15 @@ Top-down racing game against a PPO agent. It's trained in Python (Stable-Baselin
 speed   += throttle * ACCEL * dt
 speed   *= (1 - DRAG * dt)
 speed    = clamp(speed, -MAX_REVERSE, MAX_SPEED)
-heading += steer * TURN_RATE * (speed / MAX_SPEED) * dt
+radius   = max(MIN_TURN_RADIUS, speed² / GRIP)
+heading += steer * (speed / radius) * dt
 x       += cos(heading) * speed * dt
 y       += sin(heading) * speed * dt
 ```
 
-- The turn is scaled by `speed / MAX_SPEED` so a stopped car can't spin in place. Without this, the agent tends to find spinning as an exploit.
-- Constants (`ACCEL`, `DRAG`, `TURN_RATE`, `MAX_SPEED`, `MAX_REVERSE`) go in one shared `config.json` that both Python and TS load, so they can't drift apart.
+- The turning circle is tight when slow (`MIN_TURN_RADIUS`, the steering lock) and grows with speed² when fast (`GRIP` is the maximum sideways acceleration), so tight corners need braking. With 40 / 450 the radius is 40 up to speed 134 and 200 at top speed 300.
+- The turn rate is `speed / radius`, so a stopped car can't spin in place (the agent tends to find spinning as an exploit), and reversing steers the other way.
+- Constants (`ACCEL`, `DRAG`, `MIN_TURN_RADIUS`, `GRIP`, `MAX_SPEED`, `MAX_REVERSE`) go in one shared `config.json` that both Python and TS load, so they can't drift apart.
 - The car is a circle for collisions (radius `CAR_RADIUS`), which makes wall checks a simple distance-to-segment test.
 
 ## 2. Timestep: 60 Hz physics, agent acts every 4 steps
@@ -88,7 +90,7 @@ python3 tools/gen_track.py tracks/<name>.centerline.json -o tracks/<name>.json -
 
 1. **Smooth:** closed centripetal Catmull-Rom spline through the points, resampled every `segment_length` units.
 2. **Walls:** the centerline offset ±`width/2`, output as a list of segments `[[x1,y1],[x2,y2]]`.
-3. **Checkpoints:** ordered segments across the road every ~`checkpoint_spacing` units. The last one is the finish line, which is also the start line.
+3. **Checkpoints:** ordered segments across the road every ~`checkpoint_spacing` units. The last one is the finish line, which is also the start line. All checkpoints share one orientation, so a crossing counts only when `(q2 - q1) × (move) > 0` (forward).
 4. **Start poses:** two slots side by side on the start line, facing along the centerline (`x, y, heading`).
 
 The generated `tracks/<name>.json` holds `walls`, `checkpoints`, `start_poses`, `centerline`, `width`, `length`, and `min_corner_radius`. Python and TS both load this file, and only Python generates it. The script exits non-zero and warns if a corner is tighter than `width/2` or a wall folds back or crosses another wall.

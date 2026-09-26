@@ -18,7 +18,8 @@ class Config:
     drag: float
     max_speed: float
     max_reverse: float
-    turn_rate: float
+    min_turn_radius: float
+    grip: float  # max sideways acceleration; sets the turning radius at speed
     car_radius: float
     ray_max: float
     track: str

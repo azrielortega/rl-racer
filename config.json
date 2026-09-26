@@ -5,7 +5,8 @@
   "DRAG": 0.5,
   "MAX_SPEED": 300,
   "MAX_REVERSE": 100,
-  "TURN_RATE": 3.0,
+  "MIN_TURN_RADIUS": 40,
+  "GRIP": 450,
   "CAR_RADIUS": 10,
   "RAY_MAX": 300,
   "TRACK": "tracks/monza.json"

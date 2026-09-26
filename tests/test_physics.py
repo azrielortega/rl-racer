@@ -55,9 +55,33 @@ def test_moves_along_heading_with_y_down():
     assert car.y > 0
 
 
-def test_turn_radius_at_top_speed():
+def turn_radius(speed):
+    """Radius driven in one full-lock step, and the speed it was driven at (drag trims it within the step)."""
+    car = Car(0, 0, 0, speed)
+    step(car, 0, 1, CFG)
+    return car.speed * CFG.dt / car.heading, car.speed
+
+
+def test_slow_car_turns_at_steering_lock():
+    assert turn_radius(100)[0] == pytest.approx(CFG.min_turn_radius)
+
+
+def test_fast_car_turning_circle_grows_with_speed_squared():
+    radius, speed = turn_radius(200)
+    assert radius == pytest.approx(speed**2 / CFG.grip)
+    assert turn_radius(250)[0] > turn_radius(200)[0] > turn_radius(150)[0]
+
+
+def test_full_circle_at_top_speed():
+    radius = CFG.max_speed**2 / CFG.grip
     car = Car(0, 0, 0, CFG.max_speed)
-    # Hold throttle so drag doesn't slow the car; one full circle should take 2π / TURN_RATE seconds.
-    for _ in range(round(2 * math.pi / CFG.turn_rate / CFG.dt)):
+    # Hold throttle so drag doesn't slow the car; one lap of the circle takes 2π·radius / speed seconds.
+    for _ in range(round(2 * math.pi * radius / CFG.max_speed / CFG.dt)):
         step(car, 1, 1, CFG)
     assert math.hypot(car.x, car.y) < 5
+
+
+def test_reversing_steers_the_other_way():
+    car = Car(0, 0, 0, -50)
+    step(car, 0, 1, CFG)
+    assert car.heading < 0

@@ -31,7 +31,9 @@ def step(car, throttle, steer, cfg):
     car.speed += throttle * cfg.accel * dt
     car.speed *= 1 - cfg.drag * dt
     car.speed = min(max(car.speed, -cfg.max_reverse), cfg.max_speed)
-    # Turning scales with speed so a stopped car can't spin in place (an exploit the agent would find).
-    car.heading += steer * cfg.turn_rate * (car.speed / cfg.max_speed) * dt
+    # Turning circle: tight (steering lock) when slow, grip-limited (grows with speed²) when fast.
+    # Turn rate = speed / radius, so a stopped car can't spin in place and reversing steers the other way.
+    radius = max(cfg.min_turn_radius, car.speed * car.speed / cfg.grip)
+    car.heading += steer * (car.speed / radius) * dt
     car.x += math.cos(car.heading) * car.speed * dt
     car.y += math.sin(car.heading) * car.speed * dt
