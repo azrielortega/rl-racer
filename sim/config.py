@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parent.parent
 
 Point = tuple[float, float]
@@ -37,8 +39,9 @@ class Pose:
 class Track:
     width: float
     length: float
-    walls: list[Segment]  # road edges: drawn and used by the sensor rays, they don't block the car
-    centerline: list[Segment]  # closed loop; the car is out of bounds beyond width / 2 from it
+    # numpy (N, 2, 2) arrays of endpoint pairs, so the rays and bounds check test every segment at once.
+    walls: np.ndarray  # road edges: drawn and used by the sensor rays, they don't block the car
+    centerline: np.ndarray  # closed loop; the car is out of bounds beyond width / 2 from it
     checkpoints: list[Segment]  # in driving order; the last one is the finish line
     start_pose: Pose  # one qualifying car; the ghost passes through, so no second slot
 
@@ -60,15 +63,15 @@ def load_track(path):
 
     Inputs:  path (str | Path) - track file; relative paths resolve from the repo root
 
-    Outputs: Track - walls, centerline and checkpoints as ((x1, y1), (x2, y2)) tuples, plus the start pose
+    Outputs: Track - walls and centerline as (N, 2, 2) arrays, checkpoints as ((x1, y1), (x2, y2)) tuples, start pose
     """
     with open(ROOT / path) as f:
         raw = json.load(f)
     return Track(
         width=raw["width"],
         length=raw["length"],
-        walls=[_segment(s) for s in raw["walls"]],
-        centerline=[_segment(s) for s in zip(raw["centerline"], raw["centerline"][1:] + raw["centerline"][:1])],
+        walls=np.array(raw["walls"], dtype=float),
+        centerline=np.array(list(zip(raw["centerline"], raw["centerline"][1:] + raw["centerline"][:1])), dtype=float),
         checkpoints=[_segment(s) for s in raw["checkpoints"]],
         start_pose=Pose(raw["start_pose"]["x"], raw["start_pose"]["y"], raw["start_pose"]["heading"]),
     )

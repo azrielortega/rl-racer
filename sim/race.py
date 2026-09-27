@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sim.geometry import point_segment_distance, segments_cross
+from sim.geometry import min_segment_distances, segments_cross
 from sim.physics import corners, step
 
 
@@ -54,11 +54,8 @@ def is_out_of_bounds(car, track, cfg):
 
     Outputs: bool - True if out of bounds
     """
-    limit = track.width / 2
     # The road edges are the centerline offset by width / 2, so this matches the drawn edges exactly.
-    return any(
-        not any(point_segment_distance(p, a, b) <= limit for a, b in track.centerline) for p in corners(car, cfg)
-    )
+    return bool((min_segment_distances(corners(car, cfg), track.centerline) > track.width / 2).any())
 
 
 def race_step(car, progress, throttle, steer, cfg, track):

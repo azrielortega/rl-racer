@@ -1,5 +1,7 @@
 import math
 
+import numpy as np
+
 
 def _cross(ax, ay, bx, by):
     return ax * by - ay * bx
@@ -50,24 +52,40 @@ def segments_cross(p1, p2, q1, q2):
     return end1 * end2 <= 0
 
 
-def cast_ray(origin, angle, walls, max_dist):
-    """Distance along a ray to the nearest wall, capped at max_dist (one distance sensor, spec 4).
+def min_segment_distances(points, segments):
+    """Distance from each point to its nearest segment, all segments at once (vectorised point_segment_distance).
 
-    Inputs:  origin ((x, y)); angle (float) - world-space radians; walls (list[((x, y), (x, y))]); max_dist (float)
+    Inputs:  points (array-like (P, 2)); segments (array-like (S, 2, 2)) - endpoint pairs
 
-    Outputs: float - distance to the first wall hit, or max_dist if none is closer
+    Outputs: np.ndarray (P,) - shortest distance per point
     """
-    ox, oy = origin
-    dx, dy = math.cos(angle), math.sin(angle)
-    best = max_dist
-    for a, b in walls:
-        ex, ey = b[0] - a[0], b[1] - a[1]
-        denom = _cross(dx, dy, ex, ey)
-        if denom == 0:
-            continue  # parallel to the wall
-        ax, ay = a[0] - ox, a[1] - oy
-        t = _cross(ax, ay, ex, ey) / denom  # distance along the ray
-        u = _cross(ax, ay, dx, dy) / denom  # position along the wall, 0..1
-        if 0 <= t < best and 0 <= u <= 1:
-            best = t
-    return best
+    # Flat x/y arrays of shape (P, S) instead of (P, S, 2): about 3x faster at this size.
+    p = np.asarray(points, dtype=float)
+    segments = np.asarray(segments, dtype=float).reshape(-1, 2, 2)
+    ax, ay = segments[:, 0, 0], segments[:, 0, 1]
+    ex, ey = segments[:, 1, 0] - ax, segments[:, 1, 1] - ay
+    length_sq = ex * ex + ey * ey
+    dx, dy = p[:, 0:1] - ax, p[:, 1:2] - ay
+    # Zero-length segments: e is 0, so the closest point is `a` whatever t is.
+    t = np.clip((dx * ex + dy * ey) / np.where(length_sq == 0, 1, length_sq), 0, 1)
+    rx, ry = dx - t * ex, dy - t * ey
+    return np.sqrt((rx * rx + ry * ry).min(axis=1))
+
+
+def cast_rays(origin, angles, walls, max_dist):
+    """Distance along each ray to the nearest wall, capped at max_dist (the distance sensors, spec 4).
+
+    Inputs:  origin ((x, y)); angles (array-like) - world-space radians; walls (array-like (W, 2, 2)); max_dist (float)
+
+    Outputs: np.ndarray - one distance per angle, max_dist where no wall is closer
+    """
+    walls = np.asarray(walls, dtype=float).reshape(-1, 2, 2)
+    a = walls[:, 0] - origin  # (W, 2), wall start relative to the ray origin
+    e = walls[:, 1] - walls[:, 0]  # (W, 2)
+    dx, dy = np.cos(angles)[:, None], np.sin(angles)[:, None]  # (R, 1)
+    denom = dx * e[:, 1] - dy * e[:, 0]  # (R, W); 0 means the ray is parallel to the wall
+    safe = np.where(denom == 0, 1, denom)
+    t = (a[:, 0] * e[:, 1] - a[:, 1] * e[:, 0]) / safe  # distance along the ray
+    u = (a[:, 0] * dy - a[:, 1] * dx) / safe  # position along the wall, 0..1
+    hit = (denom != 0) & (t >= 0) & (u >= 0) & (u <= 1)
+    return np.minimum(np.where(hit, t, max_dist).min(axis=1), max_dist)

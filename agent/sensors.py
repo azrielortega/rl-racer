@@ -1,6 +1,8 @@
 import math
 
-from sim.geometry import cast_ray
+import numpy as np
+
+from sim.geometry import cast_rays
 
 RAY_OFFSETS = [math.radians(a) for a in (-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90)]  # relative to heading
 OBSERVATION_SIZE = len(RAY_OFFSETS) + 3
@@ -13,8 +15,7 @@ def ray_distances(car, track, cfg):
 
     Outputs: list[float] - one distance per RAY_OFFSETS entry, in world units
     """
-    pos = (car.x, car.y)
-    return [cast_ray(pos, car.heading + offset, track.walls, cfg.ray_max) for offset in RAY_OFFSETS]
+    return cast_rays((car.x, car.y), car.heading + np.array(RAY_OFFSETS), track.walls, cfg.ray_max).tolist()
 
 
 def angle_to(car, target):
