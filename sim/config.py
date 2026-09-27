@@ -40,7 +40,7 @@ class Track:
     walls: list[Segment]  # road edges: drawn and used by the sensor rays, they don't block the car
     centerline: list[Segment]  # closed loop; the car is out of bounds beyond width / 2 from it
     checkpoints: list[Segment]  # in driving order; the last one is the finish line
-    start_poses: list[Pose]
+    start_pose: Pose  # one qualifying car; the ghost passes through, so no second slot
 
 
 def load_config(path=ROOT / "config.json"):
@@ -60,7 +60,7 @@ def load_track(path):
 
     Inputs:  path (str | Path) - track file; relative paths resolve from the repo root
 
-    Outputs: Track - walls, centerline and checkpoints as ((x1, y1), (x2, y2)) tuples, plus start poses
+    Outputs: Track - walls, centerline and checkpoints as ((x1, y1), (x2, y2)) tuples, plus the start pose
     """
     with open(ROOT / path) as f:
         raw = json.load(f)
@@ -70,7 +70,7 @@ def load_track(path):
         walls=[_segment(s) for s in raw["walls"]],
         centerline=[_segment(s) for s in zip(raw["centerline"], raw["centerline"][1:] + raw["centerline"][:1])],
         checkpoints=[_segment(s) for s in raw["checkpoints"]],
-        start_poses=[Pose(p["x"], p["y"], p["heading"]) for p in raw["start_poses"]],
+        start_pose=Pose(raw["start_pose"]["x"], raw["start_pose"]["y"], raw["start_pose"]["heading"]),
     )
 
 
@@ -85,5 +85,5 @@ if __name__ == "__main__":
     print(cfg)
     print(
         f"{cfg.track}: {len(track.walls)} wall segments, {len(track.checkpoints)} checkpoints, "
-        f"{len(track.start_poses)} start poses, width {track.width}, length {track.length}"
+        f"start {track.start_pose}, width {track.width}, length {track.length}"
     )

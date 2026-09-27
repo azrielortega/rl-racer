@@ -59,7 +59,7 @@ def just_past(i, direction):
 
 def test_full_monza_lap_counts_every_checkpoint_once():
     progress = Progress()
-    pos = (TRACK.start_poses[0].x, TRACK.start_poses[0].y)
+    pos = (TRACK.start_pose.x, TRACK.start_pose.y)
     for i in range(len(TRACK.checkpoints)):
         target = just_past(i, +1)
         assert update_progress(progress, pos, target, TRACK.checkpoints) == (1, i == len(TRACK.checkpoints) - 1)
@@ -69,16 +69,15 @@ def test_full_monza_lap_counts_every_checkpoint_once():
 
 def test_monza_backwards_counts_nothing():
     progress = Progress()
-    pos = (TRACK.start_poses[0].x, TRACK.start_poses[0].y)
+    pos = (TRACK.start_pose.x, TRACK.start_pose.y)
     for i in reversed(range(len(TRACK.checkpoints) - 1)):
         target = just_past(i, -1)
         assert update_progress(progress, pos, target, TRACK.checkpoints) == (0, False)
         pos = target
 
 
-def test_start_poses_are_in_bounds():
-    for pose in TRACK.start_poses:
-        assert not is_out_of_bounds(Car.at(pose), TRACK, CFG)
+def test_start_pose_is_in_bounds():
+    assert not is_out_of_bounds(Car.at(TRACK.start_pose), TRACK, CFG)
 
 
 def car_beside_centerline(offset, turn=0.0):
@@ -107,7 +106,7 @@ def test_car_across_the_road_uses_its_length():
 
 def test_full_throttle_from_start_leaves_track_once_and_keeps_going():
     # Monza starts on the main straight, so flat out with no steering runs off at the first corner.
-    car, progress = Car.at(TRACK.start_poses[0]), Progress()
+    car, progress = Car.at(TRACK.start_pose), Progress()
     passed, went_out, first_out = 0, 0, None
     for n in range(600):
         result = race_step(car, progress, 1, 0, CFG, TRACK)

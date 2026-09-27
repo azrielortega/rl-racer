@@ -134,7 +134,7 @@ def generate(spec):
 
     Inputs:  spec (dict) - {"width", "centerline", optional "segment_length", "checkpoint_spacing"}
 
-    Outputs: (dict, list[str]) - track JSON (walls, checkpoints, start_poses, centerline) and warnings
+    Outputs: (dict, list[str]) - track JSON (walls, checkpoints, start_pose, centerline) and warnings
     """
     width = float(spec["width"])
     step = float(spec.get("segment_length", DEFAULTS["segment_length"]))
@@ -161,12 +161,7 @@ def generate(spec):
     checkpoints = [(left[i], right[i]) for i in cp_idx]
 
     (sx, sy), (tx, ty) = center[0], tangents[0]
-    heading = math.atan2(ty, tx)
-    q = width / 4
-    start_poses = [
-        {"x": sx - ty * q, "y": sy + tx * q, "heading": heading},
-        {"x": sx + ty * q, "y": sy - tx * q, "heading": heading},
-    ]
+    start_pose = {"x": sx, "y": sy, "heading": math.atan2(ty, tx)}
 
     warnings = []
     radius, r_idx = min_turn_radius(center)
@@ -194,7 +189,7 @@ def generate(spec):
         "min_corner_radius": round(radius, 2),
         "walls": [[_pt(a), _pt(b)] for a, b in walls],
         "checkpoints": [[_pt(a), _pt(b)] for a, b in checkpoints],
-        "start_poses": [{k: round(v, 4) for k, v in p.items()} for p in start_poses],
+        "start_pose": {k: round(v, 4) for k, v in start_pose.items()},
         "centerline": [_pt(p) for p in center],
     }
     return track, warnings
@@ -209,7 +204,7 @@ def _fmt(p):
 
 
 def write_svg(track, ctrl, path):
-    """Write an SVG preview: walls, checkpoints (finish in red), start poses and control points.
+    """Write an SVG preview: walls, checkpoints (finish in red), start pose and control points.
 
     Inputs:  track (dict) - output of generate(); ctrl (list) - control points; path (str) - output file
 
@@ -237,17 +232,17 @@ def write_svg(track, ctrl, path):
         parts.append(line(a, b, "#fff", 2, 'stroke-linecap="round"'))
     for x, y in ctrl:
         parts.append(f'<circle cx="{x}" cy="{y}" r="4" fill="#fc3"/>')
-    for p in track["start_poses"]:
-        tip = (p["x"] + 20 * math.cos(p["heading"]), p["y"] + 20 * math.sin(p["heading"]))
-        parts.append(f'<circle cx="{p["x"]}" cy="{p["y"]}" r="6" fill="#39f"/>')
-        parts.append(line((p["x"], p["y"]), tip, "#39f", 3))
+    p = track["start_pose"]
+    tip = (p["x"] + 20 * math.cos(p["heading"]), p["y"] + 20 * math.sin(p["heading"]))
+    parts.append(f'<circle cx="{p["x"]}" cy="{p["y"]}" r="6" fill="#39f"/>')
+    parts.append(line((p["x"], p["y"]), tip, "#39f", 3))
     parts.append("</svg>")
     with open(path, "w") as f:
         f.write("\n".join(parts))
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate track walls/checkpoints/start poses from a centerline.")
+    parser = argparse.ArgumentParser(description="Generate track walls/checkpoints/start pose from a centerline.")
     parser.add_argument("input", help="centerline JSON: {width, centerline, [segment_length], [checkpoint_spacing]}")
     parser.add_argument("-o", "--output", help="track JSON output path (default: stdout)")
     parser.add_argument("--svg", help="also write an SVG preview to this path")

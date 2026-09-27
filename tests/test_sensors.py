@@ -13,7 +13,7 @@ LEFT, AHEAD, RIGHT = 0, 4, 8  # indexes of the -90, 0 and +90 degree rays
 
 
 def start_car():
-    return Car.at(TRACK.start_poses[0])
+    return Car.at(TRACK.start_pose)
 
 
 def test_observation_shape_and_ranges():

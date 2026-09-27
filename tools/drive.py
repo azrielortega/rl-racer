@@ -109,7 +109,7 @@ def main():
     clock = pygame.time.Clock()
 
     def reset():
-        return Car.at(track.start_poses[0]), Progress(), {"current": 0.0, "last": None, "best": None, "outs": 0}
+        return Car.at(track.start_pose), Progress(), {"current": 0.0, "last": None, "best": None, "outs": 0}
 
     car, progress, stats = reset()
     show_rays, accumulator, running = True, 0.0, True

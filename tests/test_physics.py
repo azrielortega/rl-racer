@@ -20,7 +20,6 @@ def test_loads_track_from_config():
     track = load_track(CFG.track)
     assert len(track.walls) > 0
     assert len(track.checkpoints) > 2
-    assert len(track.start_poses) == 2
 
 
 def test_reaches_top_speed_in_under_two_seconds():
