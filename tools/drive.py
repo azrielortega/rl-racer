@@ -8,15 +8,14 @@ import math
 
 import pygame
 
+from agent.sensors import RAY_OFFSETS, ray_distances
 from sim.config import load_config, load_track
-from sim.geometry import cast_ray
 from sim.physics import Car, corners
 from sim.race import Progress, race_step
 
 MAX_WINDOW = (1400, 850)
 MARGIN = 20
 HUD_HEIGHT = 30
-RAY_OFFSETS = [math.radians(a) for a in (-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90)]  # spec 4
 
 BG, WALL, CP, CP_NEXT, FINISH = (43, 43, 43), (235, 235, 235), (40, 90, 70), (250, 200, 50), (220, 50, 50)
 CAR, CAR_OUT, NOSE, RAY, HIT = (60, 150, 255), (230, 60, 60), (255, 255, 255), (120, 120, 160), (255, 110, 110)
@@ -76,9 +75,8 @@ def draw(screen, font, view, cfg, track, car, progress, stats, show_rays):
 
     pos = (car.x, car.y)
     if show_rays:
-        for offset in RAY_OFFSETS:
+        for offset, d in zip(RAY_OFFSETS, ray_distances(car, track, cfg)):
             angle = car.heading + offset
-            d = cast_ray(pos, angle, track.walls, cfg.ray_max)
             end = (car.x + math.cos(angle) * d, car.y + math.sin(angle) * d)
             pygame.draw.line(screen, RAY, view(pos), view(end), 1)
             if d < cfg.ray_max:

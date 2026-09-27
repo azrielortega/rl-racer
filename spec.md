@@ -39,17 +39,20 @@ y       += sin(heading) * speed * dt
 
 `throttle = idx // 3 - 1`, `steer = idx % 3 - 1`. The keyboard maps onto the same pair: W/S for throttle, A/D for steering.
 
-## 4. Observation vector: 11 floats
+## 4. Observation vector: 12 floats
 
 ```
 [ ray_-90, ray_-67.5, ray_-45, ray_-22.5, ray_0,
   ray_+22.5, ray_+45, ray_+67.5, ray_+90,     # dist / RAY_MAX, 0..1
   speed / MAX_SPEED,                           # -1..1
-  angle_to_next_cp / π ]                       # -1..1, wrapped
+  angle_to_next_cp / π,                        # -1..1, wrapped
+  out_of_bounds ]                              # 0 or 1
 ```
 
 - Ray angles are relative to the car's heading, and each ray is capped at `RAY_MAX`.
-- `angle_to_next_cp` is measured from the car's heading to the midpoint of the next checkpoint and wrapped to [-π, π].
+- Rays start at the car's centre and measure the distance to the nearest road edge.
+- `angle_to_next_cp` is measured from the car's heading to the midpoint of the next checkpoint and wrapped to [-π, π]. Positive means the checkpoint is to the right.
+- `out_of_bounds` is needed because from outside the road the rays still just see an edge, so they can't tell inside from outside.
 
 ## 5. Reward
 
