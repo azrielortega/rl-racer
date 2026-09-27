@@ -1,6 +1,7 @@
 """Train a PPO agent on the qualifying env with parallel envs, saving checkpoints and TensorBoard logs.
 
 Usage (from the repo root): python -m agent.train [--steps 1000000] [--envs 8] [--name ppo]
+Resume: python -m agent.train --resume runs/ppo/final.zip --steps 1000000   (trains 1M more steps)
 Watch: tensorboard --logdir runs
 """
 
@@ -49,17 +50,33 @@ def main():
     parser.add_argument("--steps", type=int, default=1_000_000, help="total agent steps across all envs")
     parser.add_argument("--envs", type=int, default=8, help="parallel envs, one process each")
     parser.add_argument("--name", default="ppo", help="run folder under runs/")
+    parser.add_argument("--resume", help="saved model .zip to keep training (a checkpoint or final.zip)")
     args = parser.parse_args()
 
     out = RUNS / args.name
     env = make_vec_env(RacerEnv, n_envs=args.envs, vec_env_cls=SubprocVecEnv)
-    model = PPO("MlpPolicy", env, device="cpu", tensorboard_log=str(out), verbose=1)
-    # save_freq counts calls per env, so divide to save every ~100k total steps.
-    checkpoints = CheckpointCallback(save_freq=max(100_000 // args.envs, 1), save_path=str(out / "checkpoints"))
-    model.learn(total_timesteps=args.steps, callback=[checkpoints, LapStats()], tb_log_name="tb")
+    if args.resume:
+        model = PPO.load(args.resume, env=env, device="cpu", tensorboard_log=str(out), verbose=1)
+    else:
+        model = PPO("MlpPolicy", env, device="cpu", tensorboard_log=str(out), verbose=1)
+    # save_freq counts calls per env, so divide to save every ~50k total steps.
+    checkpoints = CheckpointCallback(save_freq=max(50_000 // args.envs, 1), save_path=str(out / "checkpoints"))
+    # When resuming, keep counting steps from the saved model so checkpoint names and graphs continue on.
+    try:
+        model.learn(
+            total_timesteps=args.steps,
+            callback=[checkpoints, LapStats()],
+            tb_log_name="tb",
+            reset_num_timesteps=not args.resume,
+        )
+    except KeyboardInterrupt:
+        print("\nstopped with Ctrl+C, saving the agent as it is now")
     model.save(out / "final")
-    env.close()
-    print(f"saved {out / 'final.zip'}")
+    print(f"saved {out / 'final.zip'} at {model.num_timesteps} steps")
+    try:
+        env.close()
+    except (BrokenPipeError, EOFError, ConnectionResetError):
+        pass  # Ctrl+C also reaches the env worker processes, so they may already be gone
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # RL Racer: Design Spec
 
-Top-down qualifying game: the player sets a lap time and tries to beat a PPO agent's lap. The agent is trained in Python (Stable-Baselines3 + Gymnasium). The browser game (TypeScript) runs the same physics for the player's car and plays the agent's best lap back as a ghost (spec 9). Physics must be identical in both.
+Top-down qualifying game: the player sets a lap time and tries to beat a PPO agent's lap. The agent is trained in Python (Stable-Baselines3 + Gymnasium). The browser game (TypeScript) runs the same physics for both cars, and the agent drives live in the browser through an ONNX export of its policy (spec 9). Physics and sensors must be identical in both.
 
 ## 1. Physics model: pure kinematic
 
@@ -97,14 +97,16 @@ python3 tools/gen_track.py tracks/<name>.centerline.json -o tracks/<name>.json -
 1. **Smooth:** closed centripetal Catmull-Rom spline through the points, resampled every `segment_length` units.
 2. **Walls:** the centerline offset ±`width/2`, output as a list of segments `[[x1,y1],[x2,y2]]`.
 3. **Checkpoints:** ordered segments across the road every ~`checkpoint_spacing` units. The last one is the finish line, which is also the start line. All checkpoints share one orientation, so a crossing counts only when `(q2 - q1) × (move) > 0` (forward).
-4. **Start pose:** one slot in the middle of the start line, facing along the centerline (`x, y, heading`). The player and the agent both start there. The agent is a ghost that the player's car passes through, so there's no second slot and no car-to-car collision.
+4. **Start pose:** one slot in the middle of the start line, facing along the centerline (`x, y, heading`). The player and the agent both start there. The two cars pass through each other, so there's no second slot and no car-to-car collision.
 
 The generated `tracks/<name>.json` holds `walls`, `checkpoints`, `start_pose`, `centerline`, `width`, `length`, and `min_corner_radius`. Python and TS both load this file, and only Python generates it. The script exits non-zero and warns if a corner is tighter than `width/2` or a wall folds back or crosses another wall.
 
 Design tips: keep `width` above about 3× `CAR_LENGTH` and the tightest corner radius above the car's turning radius at speed. The track in use is `tracks/monza.json` (a simplified Monza: chicanes removed, tightest corner radius 48), set by `TRACK` in `config.json`.
 
-## 9. Ghost lap (browser)
+## 9. Live agent in the browser (ONNX)
 
-- The track, physics and a deterministic policy all repeat exactly, so the agent's lap is the same every run. The browser doesn't run the model or the sensors.
-- `tools/record_ghost.py` runs the trained model for one lap and writes `ghosts/<track>.json`: the lap time and the car's `x, y, heading` for every physics step.
-- The game draws the ghost as a translucent car, stepping through the frames at the same fixed 60 Hz, and shows the agent's lap time as the time to beat.
+- `python -m tools.export_onnx <model.zip> -o web/agent` writes:
+  - `web/agent.onnx`: the policy's actor network only. Input `obs` float32 `[1, 12]` (spec 4), output `logits` float32 `[1, 9]`. The action is the argmax of the logits, which is the same as SB3's `deterministic=True`. It's a single self-contained file (about 32KB, only `Gemm` and `Tanh` ops).
+  - `web/agent.parity.json`: one deterministic run, recording for every agent step the car state, `next_checkpoint`, `out_of_bounds`, the observation, the logits and the action. The script checks that the ONNX action matches SB3 at every step before writing it.
+- The browser runs the model with `onnxruntime-web`. Every `FRAME_SKIP` physics steps it builds the observation with the TS port of `sensors.py`, runs the model and holds the argmax action, exactly like training (spec 2). The agent's car uses the same TS physics as the player's.
+- The TS sensors and physics must reproduce Python closely, or the agent sees inputs it never trained on and drives differently with no error. Check the port against `agent.parity.json`: from each recorded car state, the TS observation should match `obs` to about 1e-4, and the model should pick the same `action`.

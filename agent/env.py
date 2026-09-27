@@ -10,8 +10,8 @@ from sim.race import Progress, race_step
 
 CHECKPOINT_REWARD = 1.0
 LAP_REWARD = 10.0
-STEP_PENALTY = -0.01
-OUT_OF_BOUNDS_PENALTY = -5.0
+STEP_PENALTY = -0.05
+OUT_OF_BOUNDS_PENALTY = -10.0
 STALL_STEPS = 75  # agent steps (about 5 s) without a new checkpoint before the episode is cut off
 
 

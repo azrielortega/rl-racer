@@ -1,14 +1,18 @@
 """Drive the car around the configured track with the keyboard (the road edges don't block; leaving the road is flagged).
 
-Usage (from the repo root): python3 -m tools.drive
+Usage (from the repo root): python3 -m tools.drive [--model runs/ppo/final.zip]
 Controls: W/S or Up/Down throttle/brake-reverse, A/D or Left/Right steer, V toggle sensor rays, R restart, Esc quit.
+With --model the trained agent drives instead, and each run ends like a training episode (lap, out of bounds, stall).
 """
 
+import argparse
 import math
 
+import numpy as np
 import pygame
 
-from agent.sensors import RAY_OFFSETS, ray_distances
+from agent.env import STALL_STEPS, decode_action
+from agent.sensors import RAY_OFFSETS, observe, ray_distances
 from sim.config import load_config, load_track
 from sim.physics import Car, corners
 from sim.race import Progress, race_step
@@ -92,12 +96,23 @@ def draw(screen, font, view, cfg, track, car, progress, stats, show_rays):
         f"time {fmt_time(stats['current'])}   last {fmt_time(stats['last'])}   best {fmt_time(stats['best'])}   "
         f"out of bounds x{stats['outs']}   [V] rays  [R] restart"
     )
+    if stats["ended"]:
+        hud += f"   agent runs {stats['runs']}, last ended: {stats['ended']}"
     screen.blit(font.render(hud, True, TEXT), (MARGIN, 8))
     if progress.out_of_bounds:
         screen.blit(font.render("OUT OF BOUNDS", True, TEXT_OUT), (MARGIN, HUD_HEIGHT + 4))
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Drive the car, or watch a trained agent drive it.")
+    parser.add_argument("--model", help="trained PPO .zip; the agent drives instead of the keyboard")
+    args = parser.parse_args()
+    policy = None
+    if args.model:
+        from stable_baselines3 import PPO  # only needed to watch the agent; keeps keyboard mode free of torch
+
+        policy = PPO.load(args.model, device="cpu")
+
     cfg = load_config()
     track = load_track(cfg.track)
     view = View(track.walls)
@@ -109,10 +124,22 @@ def main():
     clock = pygame.time.Clock()
 
     def reset():
-        return Car.at(track.start_pose), Progress(), {"current": 0.0, "last": None, "best": None, "outs": 0}
+        stats = {"current": 0.0, "last": None, "best": None, "outs": 0, "runs": 0, "ended": None}
+        return Car.at(track.start_pose), Progress(), stats
 
     car, progress, stats = reset()
     show_rays, accumulator, running = True, 0.0, True
+    # Agent mode: physics steps into the current run, agent steps since the last checkpoint, the held action.
+    tick, since_checkpoint, held = 0, 0, (0, 0)
+
+    def end_run(reason):
+        """Start the agent's next run from the grid, keeping the lap stats (mirrors an env episode ending)."""
+        nonlocal car, progress, tick, since_checkpoint
+        stats["runs"] += 1
+        stats["ended"] = reason
+        stats["current"] = 0.0
+        car, progress = Car.at(track.start_pose), Progress()
+        tick, since_checkpoint = 0, 0
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
@@ -121,19 +148,32 @@ def main():
                 show_rays = not show_rays
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 car, progress, stats = reset()
+                tick, since_checkpoint = 0, 0
 
         # Fixed-step accumulator (spec 2): physics always advances in exact cfg.dt steps, whatever the frame rate.
         accumulator += min(clock.tick(60) / 1000, 0.25)
         while accumulator >= cfg.dt:
-            throttle, steer = read_input(pygame.key.get_pressed())
+            accumulator -= cfg.dt
+            if policy and tick % cfg.frame_skip == 0:
+                if since_checkpoint >= STALL_STEPS:
+                    end_run("stalled")
+                # Same as training: a fresh observation every FRAME_SKIP physics steps, action held in between.
+                obs = np.array(observe(car, progress, track, cfg), dtype=np.float32)
+                held = decode_action(int(policy.predict(obs, deterministic=True)[0]))
+                since_checkpoint += 1
+            throttle, steer = held if policy else read_input(pygame.key.get_pressed())
             result = race_step(car, progress, throttle, steer, cfg, track)
+            tick += 1
             stats["current"] += cfg.dt
             stats["outs"] += result.went_out
+            if result.checkpoints:
+                since_checkpoint = 0
             if result.lap:
                 stats["last"] = stats["current"]
                 stats["best"] = min(stats["best"] or math.inf, stats["current"])
                 stats["current"] = 0.0
-            accumulator -= cfg.dt
+            if policy and (result.went_out or result.lap):
+                end_run("out of bounds" if result.went_out else f"lap {stats['last']:.2f}s")
 
         draw(screen, font, view, cfg, track, car, progress, stats, show_rays)
         pygame.display.flip()
