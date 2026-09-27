@@ -110,10 +110,21 @@ The script checks that the ONNX model makes the same choice as the trained agent
 Tracks are authored as a centerline plus a road width, and `tools/gen_track.py` generates the edges, checkpoints and start pose (spec 8):
 
 ```bash
-python tools/gen_track.py tracks/monza.centerline.json -o tracks/monza.json --svg tracks/monza.svg
+python tools/gen_track.py tracks/circuit.centerline.json -o tracks/circuit.json --svg tracks/circuit.svg
 ```
 
 The track in use and all physics constants are set in [config.json](config.json), which the TypeScript game loads too. An agent only knows the track it was trained on, so changing the track means retraining.
+
+## Limitations and future work
+
+**Limitations**
+
+- **One hand-made track.** The only track is inspired by one of the circuits in Formula 1. Its centerline points in `tracks/circuit.centerline.json` were placed with help from AI to trace that circuit's layout, so it follows the real track's shape only approximately.
+- **The agent only knows the track it was trained on.** Its sensors aren't tied to one track, but it has only ever practised on this one circuit, so a new track needs its own training run.
+
+**Future work**
+
+- **Track creator.** Let users build their own tracks by placing centerline dots in the browser and setting a road width. `tools/gen_track.py` already turns a list of dots into a full track (edges, checkpoints, start pose) and warns about corners that are too tight, so the creator mainly needs an editor on top of it and a way to train or adapt an agent for each new track.
 
 ## Layout
 

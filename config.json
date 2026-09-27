@@ -10,5 +10,5 @@
   "CAR_LENGTH": 20,
   "CAR_WIDTH": 10,
   "RAY_MAX": 300,
-  "TRACK": "tracks/monza.json"
+  "TRACK": "tracks/circuit.json"
 }

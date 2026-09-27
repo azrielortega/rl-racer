@@ -23,7 +23,7 @@ def test_observation_shape_and_ranges():
 
 
 def test_side_rays_span_the_road_width_on_a_straight():
-    # Monza starts on the main straight, so straight left + straight right = road width.
+    # The track starts on the main straight, so straight left + straight right = road width.
     rays = ray_distances(start_car(), TRACK, CFG)
     assert rays[LEFT] + rays[RIGHT] == pytest.approx(TRACK.width, abs=0.5)
 

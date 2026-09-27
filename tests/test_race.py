@@ -57,7 +57,7 @@ def just_past(i, direction):
     return (ax + 0.1 * (bx - ax), ay + 0.1 * (by - ay))
 
 
-def test_full_monza_lap_counts_every_checkpoint_once():
+def test_full_lap_counts_every_checkpoint_once():
     progress = Progress()
     pos = (TRACK.start_pose.x, TRACK.start_pose.y)
     for i in range(len(TRACK.checkpoints)):
@@ -67,7 +67,7 @@ def test_full_monza_lap_counts_every_checkpoint_once():
     assert progress.laps == 1
 
 
-def test_monza_backwards_counts_nothing():
+def test_driving_backwards_counts_nothing():
     progress = Progress()
     pos = (TRACK.start_pose.x, TRACK.start_pose.y)
     for i in reversed(range(len(TRACK.checkpoints) - 1)):
@@ -105,7 +105,7 @@ def test_car_across_the_road_uses_its_length():
 
 
 def test_full_throttle_from_start_leaves_track_once_and_keeps_going():
-    # Monza starts on the main straight, so flat out with no steering runs off at the first corner.
+    # The track starts on the main straight, so flat out with no steering runs off at the first corner.
     car, progress = Car.at(TRACK.start_pose), Progress()
     passed, went_out, first_out = 0, 0, None
     for n in range(600):

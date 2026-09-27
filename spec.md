@@ -101,7 +101,7 @@ python3 tools/gen_track.py tracks/<name>.centerline.json -o tracks/<name>.json -
 
 The generated `tracks/<name>.json` holds `walls`, `checkpoints`, `start_pose`, `centerline`, `width`, `length`, and `min_corner_radius`. Python and TS both load this file, and only Python generates it. The script exits non-zero and warns if a corner is tighter than `width/2` or a wall folds back or crosses another wall.
 
-Design tips: keep `width` above about 3× `CAR_LENGTH` and the tightest corner radius above the car's turning radius at speed. The track in use is `tracks/monza.json` (a simplified Monza: chicanes removed, tightest corner radius 48), set by `TRACK` in `config.json`.
+Design tips: keep `width` above about 3× `CAR_LENGTH` and the tightest corner radius above the car's turning radius at speed. The track in use is `tracks/circuit.json`, inspired by one of the circuits in Formula 1, and set by `TRACK` in `config.json`.
 
 ## 9. Live agent in the browser (ONNX)
 
